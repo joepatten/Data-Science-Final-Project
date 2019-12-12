@@ -1,0 +1,114 @@
+---
+title: "CptS575Project_Kumar_Patten"
+author: "Ashutosh Kumar"
+date: "12/5/2019"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r echo=TRUE}
+library(dplyr)
+library(lubridate)
+library(tidyr)
+library(stringi)
+library(data.table)
+library(htree)
+library(ggplot2)
+library(ggthemes)
+library(caret)
+library(klaR)
+library(plyr)
+library(ISLR)
+library(lmtest)
+library(MASS)
+library(ggplot2)
+library(DataExplorer)
+
+setwd("~/Downloads/Fall 2019/Data Science 575/Project/Data")
+all = read.csv("AllCompaniesNEW.csv")
+
+all$mcap = abs(all$ALTPRC)*all$SHROUT
+newdata = subset(all, all$mcap >= 3000000) # Choosing the dataset with companies having more than $3 billion market cap
+
+sandp = read.csv("New S&P 500 Additions.csv")
+
+# Company.cusip has an extra digit compared to the original CUSIP. I remvoed this digit.
+
+
+sandp$cusipn = as.character(sandp$Company.Cusip)
+cusipLen = nchar(sandp$cusipn)
+cusipTrunc = substr(sandp$cusipn, start=1, stop=(cusipLen-1))
+sandp$cusip = cusipTrunc
+
+#write.csv(sandp,"sandpnew.csv")
+# Getting rid of observations without deletion date
+sandprefined = subset(sandp, Deletion_Date != "NA")
+#write.csv(sandprefined,"sandprefinednew.csv")
+#sandprefined = sandprefined[c(4,5,22)]
+#summary(sandprefined$Deletion_Date)
+
+# Merging s&p addition and deletion into the list of all companies
+m1=merge(sandprefined, newdata, by.x = "cusip", by.y = "CUSIP", all.x = FALSE)
+
+# Creating a variable to denote if the particular company is listed in the recorded month or not.
+m1$splisted = ifelse(m1$ALTPRCDT>m1$Addition_Date & m1$ALTPRCDT<m1$Deletion_Date, 1,0)
+m3 = subset(m1, mcap<72000000)
+#ary(m3)# We got rid of around 300 observations by this.
+
+x=count(m3, 'cusip')
+sum(x$freq)
+
+#Creating unique id for each company based on CUSIP
+m3$cusip = as.factor(m3$cusip)
+m3$cusip = as.numeric(m3$cusip)
+
+
+# Dealing with missing data
+# exclude variables v1, v2, v3
+#m2 = m3[-c(2,3,4,7,8,9,10,11,12,13,14,15,16,17,18,19, 20, 21, 22,23,25,27,28,29,30,31,32, 33,34,35,36,39,41, 46, 48)]
+m2 = m3[c(1,24,37,38,40,42,43,44,45,49,50,51,52,53,54,55)]
+m2 = na.exclude(m2)
+
+m4 = m2[-c(1,2)] # Final working dataset
+summary(m4)
+head(m4)
+plot_correlation(m4)
+
+m4$splisted = as.factor(m4$splisted)
+datanew = m4
+
+set.seed(123)
+
+trainIndex=createDataPartition(datanew$splisted, p=0.8)$Resample1
+train=datanew[trainIndex, ]
+test=datanew[-trainIndex, ]
+
+head(train)
+head(test)
+
+## check the balance
+print(table(datanew$splisted))
+print(table(train$splisted))
+
+####
+library(randomForest)
+model_1 = randomForest(splisted~ASKHI+ VOL+SHROUT+ALTPRC+vwretd+ewretd+I(ASKHI^2)+I(VOL^2), data = train, importance = TRUE)
+
+print(model_1)
+pred = predict(model_1, data = test)
+
+
+estPred=predict(model_1, newdata=test, type="class")
+tab_test = table(testPred, test$splisted)
+caret::confusionMatrix(tab_test)
+
+trainPred=predict(model_1, newdata = train, type = "class")
+tab_train = table(trainPred, train$splisted)
+caret::confusionMatrix(tab_train)
+
+```
+
